@@ -1,0 +1,51 @@
+name: Check app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install stable Rust
+        run: rustup update stable --no-self-update && rustup default stable
+      - name: Check Rust formatting
+        run: cargo fmt --check
+      - name: Check frontend JavaScript
+        run: node --check static/app.js
+      - name: Test backend behavior
+        run: cargo test --locked
+      - name: Build release
+        run: cargo build --release --locked
+      - name: Check real HTTP flows
+        run: cargo build --locked && python3 tests/smoke.py
+
+  container:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build deployment container
+        run: docker build -t weekend-club:test .
+      - name: Check container health and persistent storage
+        run: |
+          docker volume create weekend-club-ci-data
+          docker run -d --name weekend-club-ci -p 3000:3000 -v weekend-club-ci-data:/app/data weekend-club:test
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs weekend-club-ci
+          exit 1
+      - name: Stop container
+        if: always()
+        run: docker rm -f weekend-club-ci

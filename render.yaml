@@ -1,0 +1,24 @@
+# Deploy this Blueprint from the GitHub repository containing this file.
+# A persistent disk requires a paid service. This file does not provision anything locally.
+services:
+  - type: web
+    name: weekend-club
+    runtime: docker
+    plan: starter
+    region: oregon
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: /app/data/weekend-club.sqlite
+      - key: RUST_LOG
+        value: weekend_club=info,tower_http=info
+    disk:
+      name: weekend-club-data
+      mountPath: /app/data
+      sizeGB: 1

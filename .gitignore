@@ -1,0 +1,8 @@
+/target/
+/.cargo-local/
+/data/
+/.env
+/test-results/
+.DS_Store
+__pycache__/
+*.pyc
