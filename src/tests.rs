@@ -322,26 +322,98 @@ fn catalog_has_unique_ids_and_valid_us_timezones() {
 }
 
 #[tokio::test]
-async fn shared_links_serve_the_frontend_with_a_successful_status() {
+async fn legacy_shared_links_redirect_to_refreshable_hash_routes() {
     let router = app(AppState::new(":memory:").unwrap(), "static");
-    let response = router
+    for suffix in ["", "/edit"] {
+        let path = format!("/p/0123456789abcdef0123456789abcdef{suffix}");
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(&path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(response.headers()[header::LOCATION], format!("/#{path}"));
+    }
+}
+
+#[tokio::test]
+async fn pages_origin_can_preflight_and_use_authenticated_endpoints() {
+    let origin = "https://aryanndharamsey10.github.io";
+    let router = app_with_origin(
+        AppState::new(":memory:").unwrap(),
+        "static",
+        Some(origin.parse().unwrap()),
+    );
+    let preflight = router
+        .clone()
         .oneshot(
             Request::builder()
-                .uri("/p/0123456789abcdef0123456789abcdef")
+                .method("OPTIONS")
+                .uri("/api/plans/test")
+                .header(header::ORIGIN, origin)
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "authorization,content-type",
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight.status(), StatusCode::OK);
+    assert_eq!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        origin
+    );
+    assert!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_METHODS]
+            .to_str()
+            .unwrap()
+            .contains("PATCH")
+    );
+    assert!(
+        preflight.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]
+            .to_str()
+            .unwrap()
+            .contains("authorization")
+    );
+    let created = create(&router).await;
+    let id = created["plan"]["id"].as_str().unwrap();
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/plans/{id}"))
+                .header(header::ORIGIN, origin)
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(
-        response.headers()[header::CONTENT_TYPE]
-            .to_str()
-            .unwrap()
-            .starts_with("text/html")
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        origin
     );
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    assert!(String::from_utf8_lossy(&body).contains("/app.js"));
+    let blocked = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/mountains")
+                .header(header::ORIGIN, "https://unrelated.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Browsers only accept the configured origin, never a reflected arbitrary origin.
+    assert_ne!(
+        blocked
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .and_then(|v| v.to_str().ok()),
+        Some("https://unrelated.example")
+    );
 }
 
 fn historical_fixture() -> ForecastData {

@@ -19,7 +19,7 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --check
       - name: Check frontend JavaScript
-        run: node --check static/app.js
+        run: node --check static/app.js && node --test tests/frontend.test.mjs
       - name: Test backend behavior
         run: cargo test --locked
       - name: Build release

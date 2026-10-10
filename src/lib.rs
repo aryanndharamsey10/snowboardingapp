@@ -2,7 +2,7 @@ use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{any, get, post, put},
 };
 use chrono::{Datelike, Duration, NaiveDate, Utc, Weekday};
@@ -14,6 +14,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tower_http::{
+    cors::CorsLayer,
     services::{ServeDir, ServeFile},
     set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
@@ -135,9 +136,31 @@ impl AppState {
 }
 
 pub fn app(state: AppState, static_directory: &str) -> Router {
+    let origin = std::env::var("FRONTEND_ORIGIN").ok().map(|value| {
+        value
+            .parse::<HeaderValue>()
+            .expect("FRONTEND_ORIGIN must be a valid HTTP origin")
+    });
+    app_with_origin(state, static_directory, origin)
+}
+
+fn app_with_origin(state: AppState, static_directory: &str, origin: Option<HeaderValue>) -> Router {
+    let cors = origin.map_or_else(CorsLayer::new, |origin| {
+        CorsLayer::new()
+            .allow_origin(origin)
+            .allow_methods([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::PUT,
+                axum::http::Method::PATCH,
+            ])
+            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+    });
     Router::new()
         .route("/api/health", get(|| async { Json(json!({"status":"ok"})) }))
         .route("/api/mountains", get(mountains))
+        .route("/p/{id}", get(|Path(id): Path<String>| async move { Redirect::temporary(&format!("/#/p/{id}")) }))
+        .route("/p/{id}/edit", get(|Path(id): Path<String>| async move { Redirect::temporary(&format!("/#/p/{id}/edit")) }))
         .route("/api/plans", post(create_plan))
         .route("/api/plans/{id}", get(get_plan).patch(update_plan))
         .route("/api/plans/{id}/availability", put(save_availability))
@@ -148,6 +171,7 @@ pub fn app(state: AppState, static_directory: &str) -> Router {
         .layer(SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("no-store")))
         .layer(SetResponseHeaderLayer::if_not_present(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::if_not_present(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; base-uri 'self'; frame-ancestors 'none'")))
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
