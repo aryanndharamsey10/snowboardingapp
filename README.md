@@ -46,6 +46,7 @@ Open-Meteo's free endpoint is for noncommercial usage; use an appropriate paid e
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Bind address; use `0.0.0.0` for a container or LAN access |
+| `FRONTEND_ORIGIN` | unset | Allowed frontend origin for split hosting, e.g. `https://aryanndharamsey10.github.io` (no path) |
 | `PORT` | `3000` | HTTP port |
 | `DATABASE_PATH` | `data/weekend-club.sqlite` | SQLite file, including a writable parent directory |
 | `STATIC_DIR` | `static` | Frontend files |
@@ -66,7 +67,7 @@ The backend tests cover ownership, restricted shared-link choices, participant c
 
 ## Deployment
 
-The share link uses the app's current origin. A localhost link works on the local computer; to invite remote friends, deploy the Rust server on a publicly reachable host with HTTPS and a persistent writable data volume. The included Dockerfile builds one server that serves both the frontend and API.
+The current deployment uses GitHub Pages for the frontend and a local Rust backend through an HTTPS tunnel. Share links retain the Pages project path and use hash routes so direct visits work. Configure the backend origin in `static/config.js` and start Rust with `FRONTEND_ORIGIN=https://aryanndharamsey10.github.io`. The frontend remains browsable while the backend is offline. See [deployment instructions](DEPLOYMENT.md) for startup and tunnel restart commands. The Dockerfile also supports hosting the entire app on a server.
 
 ```bash
 docker build -t weekend-club .

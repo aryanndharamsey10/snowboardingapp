@@ -1,7 +1,7 @@
 import config from './config.js';
 import {routePath, routeUrl, apiUrl} from './hosting.mjs';
 const appBase = new URL('.', import.meta.url);
-const backendUrl = config.backendUrl || '';
+const backendUrl = ['localhost','127.0.0.1','[::1]'].includes(location.hostname) ? '' : config.backendUrl || '';
 const $ = (selector, root = document) => root.querySelector(selector);
 const escape = (value = '') => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths = {
